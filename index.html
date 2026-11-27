@@ -51,6 +51,12 @@ h2{font-family:var(--cond);font-size:18px;font-weight:600;margin:0 0 8px;letter-
 .sub{font-size:13px;color:var(--mute);margin-top:4px}
 .info{position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:13px;font-weight:600;cursor:pointer;font-family:Georgia,serif;font-style:italic}
 /* Tagesnavigation */
+.homebar{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 0;min-height:30px}
+.batt{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mute);background:none;border:0;padding:4px 2px;font:inherit;font-size:13px;cursor:pointer}
+.batt svg{width:22px;height:12px}.batt.low{color:var(--red)}.batt .num{color:var(--ink)}.batt.low .num{color:var(--red)}
+.rbtn{width:32px;height:32px;border-radius:50%;border:1px solid var(--line,rgba(255,255,255,.12));background:none;color:var(--mute);display:grid;place-items:center;cursor:pointer;padding:0}
+.rbtn svg{width:16px;height:16px}.rbtn:disabled{opacity:.6}.rbtn.spin svg{animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
 .daynav{display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 2px}
 .daynav button{width:44px;height:44px;border-radius:50%;border:0;background:transparent;color:var(--mute);font-size:22px;cursor:pointer}
 .daynav button:disabled{opacity:.2}
@@ -295,6 +301,8 @@ nav.tabs a,nav.tabs .navmore{font-family:inherit;text-transform:none;letter-spac
 
 <!-- HEUTE -->
 <section class="screen" id="s-heute">
+  <div class="homebar"><button class="batt" id="homeBatt" aria-label="Akku des Straps"><svg viewBox="0 0 22 12" fill="none"><rect x=".75" y=".75" width="18.5" height="10.5" rx="2.5" stroke="currentColor" stroke-width="1.5"/><rect x="20.2" y="3.8" width="1.6" height="4.4" rx=".8" fill="currentColor"/><rect id="battFill" x="2.5" y="2.5" width="0" height="7" rx="1.2" fill="currentColor"/></svg><span class="num" id="homeBattTxt">– %</span><span id="homeBattAge"></span></button>
+  <button class="rbtn" id="strapSyncBtn" aria-label="Whoop-Daten vom Strap laden" title="Whoop-Daten vom Strap laden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button></div>
   <div class="daynav"><button id="dPrev" aria-label="Vorheriger Tag">‹</button><b id="dLabel">Heute</b><button id="dNext" aria-label="Nächster Tag">›</button></div>
   <div class="dials">
     <a class="dial" href="#schlaf"><div class="ring" id="dSleep"></div><p class="lbl">Schlaf</p></a>
@@ -1187,7 +1195,7 @@ const dayLabel=d0=>{const t=midnight(Date.now());return d0===t?"Heute":d0===t-D?
 $("dPrev").onclick=()=>{DAY-=D;renderHome()};$("dNext").onclick=()=>{if(DAY<midnight(Date.now())){DAY+=D;renderHome()}};
 
 /* ---------- Heute ---------- */
-async function renderHome(){const d=await computeDay(DAY);
+async function renderHome(){paintBattery();const d=await computeDay(DAY);
   $("dLabel").textContent=dayLabel(DAY);$("dNext").disabled=DAY>=midnight(Date.now());
   const sl=d.sleep;
   ring($("dSleep"),sl?sl.perf/100:0,sl?C.sleep:C.dim,sl?sl.perf:"–",sl?"%":"");
@@ -1619,7 +1627,7 @@ $("syncBtn").onclick=startSync;
 
 /* ---------- Bluetooth ---------- */
 const BLE={device:null,decoder:null,decName:"",manual:false,tries:0,state:"off",battery:null};
-function setConn(state,txt){BLE.state=state;$("connDot").className="dot"+(state==="on"?" on":state==="wait"?" wait":"");$("connTxt").textContent=txt;
+function setConn(state,txt){BLE.state=state;try{paintBattery()}catch(e){}$("connDot").className="dot"+(state==="on"?" on":state==="wait"?" wait":"");$("connTxt").textContent=txt;
   $("battTxt").textContent=state==="on"&&BLE.battery!=null?BLE.battery+" %":"";updateCheckHint()}
 const STD_HR="0000180d-0000-1000-8000-00805f9b34fb";
 class StandardHrDecoder{constructor(){this.name="Standard-HF"}
@@ -1638,7 +1646,7 @@ class WhoopDecoder{constructor(){this.name="WHOOP 4.0";this.seq=1;this.chs=[];th
           else if(f.type===47){const r=EP.parseHistorical(f.frame,Date.now(),SY.layout);if(r){SY.layout=r.layout;onHistRecord(r)}else if(++SY.bad<=5)log("!","Historie nicht lesbar",f.frame);if(SY.on)armSyncTimeout()}
           else if(f.type===49)this.onMeta(f);
           else if(f.type===48)log("·","Event "+(EP.EVT[f.body[2]]||f.body[2]));
-          else if(f.type===36)log("·","Antwort auf Kommando "+f.body[2])})};
+          else if(f.type===36){log("·","Antwort auf Kommando "+f.body[2],f.frame);if(f.body[2]===EP.CMD.GET_BATTERY_LEVEL&&f.body.length>=7){const v=(f.body[5]|(f.body[6]<<8))/10;if(v>=0&&v<=100&&BLE.battSrc!=="std")setBattery(Math.round(v),"whoop")}}})};
       ch.addEventListener("characteristicvaluechanged",h);await ch.startNotifications();this.chs.push([ch,h])}catch(e){log("!",lab+" nicht verfügbar: "+e.message)}}
     await this.send(EP.CMD.TOGGLE_REALTIME_HR,[1],true);/* bestätigter Schreibzugriff löst Bonding aus */
     try{await this.send(EP.CMD.GET_BATTERY_LEVEL,[0])}catch(e){}
@@ -1670,8 +1678,8 @@ async function attach(){setConn("wait","Verbinde …");const server=await BLE.de
   const use=S.dec==="standard"?"standard":S.dec==="whoop"?"whoop":(hasW?"whoop":"standard");
   BLE.decoder=use==="whoop"?new WhoopDecoder():new StandardHrDecoder();BLE.decName=BLE.decoder.name;
   await BLE.decoder.start(server,emit);
-  BLE.battery=null;try{const bs=await server.getPrimaryService("battery_service"),bc=await bs.getCharacteristic("battery_level");BLE.battery=(await bc.readValue()).getUint8(0);
-    bc.addEventListener("characteristicvaluechanged",e=>{BLE.battery=e.target.value.getUint8(0);setConn("on",BLE.device.name||"Verbunden")});bc.startNotifications().catch(()=>{})}catch(e){}
+  BLE.battery=null;BLE.battSrc=null;try{const bs=await server.getPrimaryService("battery_service"),bc=await bs.getCharacteristic("battery_level");BLE.battSrc="std";setBattery((await bc.readValue()).getUint8(0),"std");
+    bc.addEventListener("characteristicvaluechanged",e=>{setBattery(e.target.value.getUint8(0),"std");setConn("on",BLE.device.name||"Verbunden")});bc.startNotifications().catch(()=>{})}catch(e){}
   BLE.tries=0;setConn("on",(BLE.device.name||"Verbunden").replace(/^WHOOP\s*/i,"WHOOP "));toast("Verbunden · "+BLE.decName);
   if(use==="whoop"&&S.sync==="1"&&!SY.on)startSync()}
 function onDisc(){log("·","Verbindung getrennt");flushMinute();if(SY.on){flushHist();SY.on=false;syncUi("Verbindung beim Laden getrennt – der Rest folgt beim nächsten Verbinden.");setTimeout(()=>syncUi(""),8000)}
@@ -1863,6 +1871,22 @@ async function recheckLate(){let n=0;if(!SY.late||!SY.late.size)return 0;
 const qualTxt=c=>!c||!c.n?"ohne Whoop-Daten":c.r>=0.9&&c.mae<=5?"Übereinstimmung sehr gut":c.r>=0.75&&c.mae<=10?"Übereinstimmung gut":"Übereinstimmung mäßig";
 function showSyncSummary(lines,found){sheet("Aktualisiert",lines.map(l=>"<p>"+esc(l)+"</p>").join("")+(found.length?'<div style="margin-top:12px">'+found.map(s=>'<button class="btn ghost wide" style="margin-top:8px;justify-content:space-between;text-transform:none;letter-spacing:0" data-open="'+esc(s.id)+'"><span>'+esc(s.sport||"Sport")+" · "+esc(fmtDate(s.start,{weekday:"short"}))+" "+fmtTime(s.start)+" · "+Math.round(s.dur/60)+' Min.</span><span class="mute small">'+esc(qualTxt(s.cmp))+'</span></button>').join("")+'</div>':""))}
 $("sheetB").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(!b)return;const s=SESSIONS.find(x=>x.id===b.dataset.open);$("sheet").classList.remove("on");if(s)openSavedCmp(s)});
+/* ---------- Akku & Strap-Aktualisierung auf der Startseite ---------- */
+async function setBattery(v,src){BLE.battery=v;try{await DB.put("meta",{k:"battery",v,ts:Date.now(),src})}catch(e){}paintBattery();if(BLE.state==="on")$("battTxt").textContent=v+" %"}
+async function paintBattery(){let b=null;try{b=await DB.get("meta","battery")}catch(e){}const v=BLE.state==="on"&&BLE.battery!=null?BLE.battery:b?b.v:null;
+  $("homeBattTxt").textContent=v!=null?v+" %":"– %";$("battFill").setAttribute("width",v!=null?Math.max(1,Math.round(15*v/100)):0);
+  $("homeBatt").classList.toggle("low",v!=null&&v<=20);
+  const live=BLE.state==="on"&&BLE.battery!=null;$("homeBattAge").textContent=live||!b?"":"· "+(Date.now()-b.ts<20*3600e3?"Stand "+fmtTime(b.ts):fmtDate(b.ts));}
+$("homeBatt").onclick=()=>sheet("Akku des Straps",'<p>'+(BLE.state==="on"&&BLE.battery!=null?"Aktuell "+BLE.battery+" %.":"Zeigt den Stand der letzten Verbindung. Mit ↻ verbindest du den Strap und aktualisierst ihn.")+'</p><p class="sub">Grob auch am Strap selbst: zweimal tippen – grün über 50 %, gelb 20–49 %, rot darunter.</p>');
+async function syncStrap(){if(SYNCING)return;const b=$("strapSyncBtn");SYNCING=true;b.disabled=true;b.classList.add("spin");
+  try{if(L.demo){toast("Demo-Modus: kein Strap");return}
+    if(!("bluetooth" in navigator)){toast("Bluetooth gibt es hier nicht – öffne die App in Bluefy");return}
+    if(BLE.state!=="on"){try{if(BLE.device){BLE.manual=false;await attach()}else await connect()}catch(e){log("!","Strap verbinden: "+e.message)}}
+    if(BLE.state==="on"&&BLE.decoder instanceof WhoopDecoder){try{await BLE.decoder.send(EP.CMD.GET_BATTERY_LEVEL,[0])}catch(e){}
+      if(!SY.on)await startSync();await waitSync(300e3);await reload();route();toast(SY.lastRecs?SY.lastRecs.toLocaleString("de-DE")+" Datensätze vom Strap geladen":"Keine neuen Daten auf dem Strap")}
+    else toast("Strap nicht verbunden")}
+  finally{SYNCING=false;b.disabled=false;b.classList.remove("spin");paintBattery()}}
+$("strapSyncBtn").onclick=syncStrap;
 async function syncAll(){if(SYNCING)return;SYNCING=true;const btn=$("syncAllBtn"),st=$("syncAllMsg"),lines=[],found=[];btn.disabled=true;
   try{
     if(Gist.on()&&!L.demo){st.textContent="Gleiche Sicherung ab …";try{if(await Gist.pull()){await reload()}}catch(e){lines.push("Sicherung: "+e.message)}}
