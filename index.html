@@ -51,6 +51,12 @@ h2{font-family:var(--cond);font-size:18px;font-weight:600;margin:0 0 8px;letter-
 .sub{font-size:13px;color:var(--mute);margin-top:4px}
 .info{position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--mute);font-size:13px;font-weight:600;cursor:pointer;font-family:Georgia,serif;font-style:italic}
 /* Tagesnavigation */
+.szones{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.szones div{background:#141414;border-radius:10px;padding:8px 10px}
+.szones b{display:block;font-family:var(--cond);font-size:20px}.szones span{font-size:12px;color:var(--mute)}
+.tiles .card{min-height:132px}.tiles .kcalbtn{display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch}
+.smeter{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:8px 0 6px}.smeter i{height:4px;border-radius:2px;background:#262626;transition:background .3s}
+.smeter.z0 i:nth-child(1){background:#0099ff}.smeter.z1 i:nth-child(2){background:#ffc53d}.smeter.z2 i:nth-child(3){background:#ff5577}
+@media (prefers-reduced-motion:reduce){.smeter i{transition:none}}
 .homebar{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 0;min-height:30px}
 .batt{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mute);background:none;border:0;padding:4px 2px;font:inherit;font-size:13px;cursor:pointer}
 .batt svg{width:22px;height:12px}.batt.low{color:var(--red)}.batt .num{color:var(--ink)}.batt.low .num{color:var(--red)}
@@ -315,9 +321,11 @@ nav.tabs a,nav.tabs .navmore{font-family:inherit;text-transform:none;letter-spac
     <div class="scale" id="coachScale"><i class="band" id="coachBand"></i><i class="cur" id="coachCur" style="left:0;width:0"></i></div>
     <div class="ticks"><span>0</span><span>7</span><span>14</span><span>21</span></div>
   </div>
-  <div class="grid3">
+  <div class="grid2 tiles">
     <div class="card"><p class="lbl">HRV</p><div class="mid" style="color:var(--cyan)"><span class="num" id="hHrv">–</span><span class="unit">ms</span></div><div class="sub" id="hHrvSub">&nbsp;</div></div>
     <div class="card"><p class="lbl">Ruhepuls</p><div class="mid"><span class="num" id="hRhr">–</span><span class="unit">bpm</span></div><div class="sub" id="hRhrSub">&nbsp;</div></div>
+    <button class="card kcalbtn" id="stressCard" aria-label="Stress der letzten 24 Stunden öffnen"><p class="lbl">Stress</p><div class="mid"><span class="num" id="hStress">–</span><span class="unit">von 3</span></div>
+      <div class="smeter" id="hStressMeter" aria-hidden="true"><i></i><i></i><i></i></div><div class="sub" id="hStressSub">&nbsp;</div></button>
     <button class="card kcalbtn" id="kcalCard" aria-label="Kalorien-Details öffnen"><p class="lbl">Kalorien</p><div class="mid"><span class="num" id="hKcal">–</span><span class="unit">kcal</span></div><div class="sub">gesamt · Details ›</div></button>
   </div>
   <div class="card"><h2>Aktivitäten</h2><ul class="list" id="hActs"></ul>
@@ -345,6 +353,15 @@ nav.tabs a,nav.tabs .navmore{font-family:inherit;text-transform:none;letter-spac
 </section>
 
 <!-- RECOVERY -->
+<section class="screen" id="s-stress">
+  <h1>Stress</h1><p class="mute small" id="stDate" style="margin:0">Letzte 24 Stunden</p>
+  <div class="card" style="text-align:center"><button class="info" data-info="stress" aria-label="Stress erklärt">i</button>
+    <p class="lbl">Aktuell</p><div class="num" id="stNow" style="font-family:var(--cond);font-size:64px;font-weight:600;line-height:1.05">–</div><p class="lbl" id="stLvl" style="margin:4px 0 0">&nbsp;</p><p class="sub" id="stNowSub" style="margin:6px 0 0"></p></div>
+  <div class="card"><h2>Verlauf · letzte 24 Stunden</h2><div class="fig" id="fStress" style="height:210px"><svg></svg></div>
+    <p class="sub" style="margin:6px 0 0">Blau 0–1 niedrig · Gelb 1–2 mittel · Rot 2–3 hoch · grün hinterlegt: Schlaf · graue Striche unten: Bewegung/Training (nicht bewertet)</p>
+    <div class="szones" id="stZones"></div></div>
+  <div class="card" id="stBase"></div>
+</section>
 <section class="screen" id="s-recovery">
   <h1>Recovery</h1><p class="mute small" id="rcDate" style="margin:0"></p>
   <div class="card" style="text-align:center"><button class="info" data-info="recovery" aria-label="Recovery erklärt">i</button><div class="ring xl" id="rRec"></div><p class="lbl" id="rcState">–</p></div>
@@ -719,6 +736,19 @@ var EP = (function(){
   function sd(a){if(a.length<2)return 0;var m=mean(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1))}
   function median(a){var b=a.slice().sort(function(x,y){return x-y}),h=b.length>>1;return b.length%2?b[h]:(b[h-1]+b[h])/2}
   function pct(a,p){var b=a.slice().sort(function(x,y){return x-y});return b[Math.min(b.length-1,Math.max(0,Math.floor(b.length*p)))]}
+
+  /* Stress 0–3 (angelehnt an WHOOP Stress Monitor): Puls und HRV je Minute gegen die persönliche
+     Basis der letzten 14 Tage (wach, ohne Bewegung); Minuten mit Bewegung/Training werden nicht bewertet. */
+  function stressBase(rows){var hr=[],ln=[];rows.forEach(function(r){if(r.hr>0)hr.push(r.hr);if(r.ln!=null)ln.push(r.ln)});
+    if(hr.length<180)return null;var mh=median(hr),sh=Math.max(4,1.4826*median(hr.map(function(v){return Math.abs(v-mh)})));
+    var b={hr:mh,hrSd:sh,n:hr.length};if(ln.length>=120){var ml=median(ln);b.ln=ml;b.lnSd=Math.max(0.15,1.4826*median(ln.map(function(v){return Math.abs(v-ml)})))}return b}
+  function stressValue(r,b){if(!b||!(r.hr>0))return null;var zh=(r.hr-b.hr)/b.hrSd,z=zh;
+    if(r.ln!=null&&b.ln!=null){var zv=(b.ln-r.ln)/b.lnSd;z=0.5*zh+0.5*zv}
+    var v=3/(1+Math.exp(-1.2*(z-0.35)));return Math.max(0,Math.min(3,v))}
+  function stressLevel(v){return v==null?"":v<1?"Niedrig":v<2?"Mittel":"Hoch"}
+  function lnRmssdByMinute(rrRows){var by={};rrRows.forEach(function(r){by[r.t]=r.rr||[]});var out={};
+    Object.keys(by).forEach(function(k){var t=+k,acc=[];for(var j=-4;j<=0;j++){var a=by[t+j*60000];if(a)acc=acc.concat(a)}
+      if(acc.length>=60){var c=cleanRR(acc);if(c.beats.length>=50){var v=rmssd(c.beats);if(v>3&&v<250)out[t]=Math.log(v)}}});return out}
   function cleanRR(rr){
     var acc=[],recent=[],rej=0;
     for(var i=0;i<rr.length;i++){
@@ -894,7 +924,7 @@ var EP = (function(){
     if(!out.length)out.push({tone:"ok",text:"Noch zu wenig Daten. Nach einigen Nächten mit dem Strap erscheinen hier deine Muster."});
     return out;
   }
-  return {W:W,PT:PT,CMD:CMD,EVT:EVT,crc8:crc8,crc32:crc32,u32:u32,buildCmd:buildCmd,buildAck:buildAck,buildAlarm:buildAlarm,nextAlarmTs:nextAlarmTs,repeatText:repeatText,le32:le32,FrameReader:FrameReader,parseRealtime:parseRealtime,parseHistorical:parseHistorical,parseMeta:parseMeta,motionOf:motionOf,StepEstimator:StepEstimator,parseStdHr:parseStdHr,hex:hex,
+  return {stressBase:stressBase,stressValue:stressValue,stressLevel:stressLevel,lnRmssdByMinute:lnRmssdByMinute,W:W,PT:PT,CMD:CMD,EVT:EVT,crc8:crc8,crc32:crc32,u32:u32,buildCmd:buildCmd,buildAck:buildAck,buildAlarm:buildAlarm,nextAlarmTs:nextAlarmTs,repeatText:repeatText,le32:le32,FrameReader:FrameReader,parseRealtime:parseRealtime,parseHistorical:parseHistorical,parseMeta:parseMeta,motionOf:motionOf,StepEstimator:StepEstimator,parseStdHr:parseStdHr,hex:hex,
     mean:mean,sd:sd,median:median,pct:pct,cleanRR:cleanRR,rmssd:rmssd,analyzeCheck:analyzeCheck,detectSleep:detectSleep,awakeMinutes:awakeMinutes,nightMetrics:nightMetrics,baselineOf:baselineOf,recovery:recovery,recColor:recColor,
     trimpStep:trimpStep,parseFIT:parseFIT,finishWorkout:finishWorkout,toMinutes:toMinutes,detectWorkouts:detectWorkouts,corr:corr,compareHr:compareHr,mergeHr:mergeHr,hrvTrend:hrvTrend,sri:sri,stageNight:stageNight,STAGE_IDEAL:STAGE_IDEAL,strain:strain,strainLabel:strainLabel,strainTarget:strainTarget,zoneOf:zoneOf,bmr:bmr,activeKcal:activeKcal,sleepNeed:sleepNeed,dayKey:dayKey,insights:insights};
 })();
@@ -1113,6 +1143,7 @@ const INFO={
   steps:["Schritte – Schätzung","<p>Der Strap zählt keine Schritte selbst. Er speichert aber jede Sekunde die Richtung der Schwerkraft am Handgelenk. Eigenpuls erkennt daraus Gehphasen: mindestens 8 zusammenhängende Sekunden mit deutlicher Bewegung. Diese Sekunden werden mit deiner Schrittfrequenz hochgerechnet (Laufen bei starker Bewegung: 160 pro Minute).</p><p>Schritte kommen mit den Strap-Daten – also beim Laden, z. B. morgens oder über „Jetzt Daten laden“ in den Einstellungen. Live-Werte enthalten keine Bewegungsdaten.</p><p><b>Bewegungszeit:</b> Eine Minute zählt als <b>mäßig</b> ab 64 % deiner Max-HF oder ab 100 Schritten pro Minute, als <b>intensiv</b> ab 77 % oder ab 130 Schritten (Intensitätsstufen des American College of Sports Medicine; Schrittfrequenz-Grenzen aus der CADENCE-Adults-Studie). So zählen auch Radfahren oder Krafttraining mit.</p><p><b>WHO-Empfehlung:</b> 150–300 Minuten mäßige oder 75–150 Minuten intensive Bewegung pro Woche – deshalb zählen intensive Minuten doppelt.</p><p><b>Schrittziel:</b> Die 10.000 Schritte stammen ursprünglich aus einer Werbekampagne. Laut einer Meta-Analyse von 15 Kohorten (Lancet Public Health 2022) sinkt das Sterberisiko unter 60 Jahren bis etwa 8.000–10.000 Schritte, ab 60 bis etwa 6.000–8.000 – darüber kaum noch. Ohne eigenes Ziel nimmt Eigenpuls die Untergrenze für dein Alter.</p><p class='mute small'>Eine grobe, experimentelle Schätzung. Kalibriere die Schrittfrequenz in den Einstellungen; bei Radfahren oder Armbewegungen kann sie danebenliegen.</p>"],
   hrvtrend:["HRV-Trend – so wird bewertet","<p>Einzelne Nächte schwanken stark. Sportwissenschaftliche Leitlinien empfehlen deshalb, das <b>7-Tage-Mittel der logarithmierten RMSSD</b> zu beobachten statt einzelner Werte (Plews, Laursen, Buchheit; Australian Institute of Sport).</p><p>Dein <b>Normalbereich</b> ist dein 60-Tage-Mittel ± 0,5 Standardabweichungen – die kleinste Änderung, die als bedeutsam gilt. Liegt der Trend darunter, deutet das auf Stress, Krankheit oder unzureichende Erholung hin; darüber meist auf gute Anpassung.</p><p>Der <b>CV</b> zeigt, wie stark die HRV von Nacht zu Nacht schwankt. Üblich sind 3–13 %. Deutlich höhere Werte sprechen für Unruhe im System, z. B. durch wechselnde Schlafzeiten, Alkohol oder Reisen.</p>"],
   garmin:["Garmin-Abgleich – so funktioniert er","<p><b>Zuordnung:</b> Eigenpuls sucht die Whoop-Daten im Zeitraum deiner Garmin-Einheit – eine aktiv gestartete Whoop-Aktivität oder eine automatisch erkannte (mind. 10 Minuten über 40 % deiner Herzfrequenz-Reserve).</p><p><b>Vergleich:</b> Beide Herzfrequenz-Kurven werden Minute für Minute gegenübergestellt. Ein Zeitversatz der Uhren (bis ± 3 Min.) wird erkannt und ausgeglichen. Angezeigt werden Korrelation, mittlere Abweichung und ob der Whoop systematisch höher oder niedriger misst.</p><p><b>Korrektur:</b> Start und Ende nimmt Eigenpuls von deiner Garmin-Uhr, weil du sie aktiv gestartet hast. Bei der Herzfrequenz bildet „Automatisch“ den Mittelwert, wenn beide höchstens 10 bpm auseinanderliegen; sonst gewinnt der Wert, der besser zu den Nachbarminuten beider Geräte passt – Ausreißer einer Quelle fallen so heraus. Fehlt eine Quelle, füllt die andere die Lücke. Distanz und Kalorien kommen von Garmin.</p><p>Die korrigierte Herzfrequenz ersetzt die Whoop-Werte dieses Zeitraums und fließt in Anstrengung, Kalorien und Bewegungszeit des Tages ein. „Korrektur rückgängig“ stellt die Originaldaten wieder her.</p>"],
+  stress:["Stress (0–3)","<p>Der Stresswert zeigt, wie stark dein Körper gerade aktiviert ist, nach dem Vorbild des WHOOP Stress Monitor: Puls und HRV jeder Minute werden mit deiner persönlichen Basis der letzten 14 Tage verglichen (wach, ohne Bewegung). Höherer Puls und niedrigere HRV als üblich bedeuten mehr Stress.</p><p><b>0–1 niedrig</b> – ruhig, erholt · <b>1–2 mittel</b> – normaler Alltag · <b>2–3 hoch</b> – starke Aktivierung, z. B. Anspannung, Ärger, Koffein, Krankheit.</p><p>Minuten mit Schritten oder während eines Trainings werden nicht bewertet, damit Sport nicht als Stress zählt. Ohne Schlag-zu-Schlag-Daten rechnet die App nur mit dem Puls. Die Werte sind eine eigene Annäherung – WHOOP veröffentlicht seine Formel nicht.</p>"],
   icu:["Garmin automatisch über intervals.icu","<p>Garmin bietet Privatpersonen keine eigene Schnittstelle. intervals.icu ist ein Trainingsdienst, der deine Garmin-Aktivitäten automatisch übernimmt und sie über eine offene Schnittstelle bereitstellt.</p><p>Beim Tippen auf „Aktualisieren“ fragt Eigenpuls dort direkt aus deinem Browser die neuen Einheiten seit dem letzten Abruf ab, lädt ihren Herzfrequenzverlauf und gleicht jede Einheit automatisch mit den Whoop-Daten ab (Einstellung „Automatisch“). Danach siehst du eine Zusammenfassung und kannst jeden Abgleich öffnen oder rückgängig machen.</p><p>Dein API-Schlüssel wird nur in diesem Browser gespeichert und nur an intervals.icu gesendet. Er gibt Lesezugriff auf dein intervals.icu-Konto – gib ihn nicht weiter. In Backups wird er nicht mitgespeichert – auf einem neuen Gerät trägst du ihn einfach neu ein.</p>"],
   coach:["Anstrengungs-Coach","<p>Wie viel Belastung zu deiner Erholung passt: Grüne Recovery → Strain 14–18, gelbe → 10–14, rote → unter 10. Der blaue Bereich markiert dein Ziel, der Balken deinen aktuellen Strain.</p>"]
 };
@@ -1182,20 +1213,20 @@ async function finishSleep(key,sl,mins,prevStrain,final){
 async function backfill(){const t=midnight(Date.now());for(let i=30;i>=1;i--)await computeDay(t-i*D)}
 /* ---------- Routing & Tagesauswahl ---------- */
 let DAY=midnight(Date.now());
-const TABS=["heute","schlaf","recovery","strain","live","check","training","gewicht","verlauf","einstellungen","wecker","abgleich"];
+const TABS=["heute","stress","schlaf","recovery","strain","live","check","training","gewicht","verlauf","einstellungen","wecker","abgleich"];
 function route(){let t=(location.hash||"").slice(1);if(!TABS.includes(t))t="heute";
   document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id==="s-"+t));
-  const navT=["schlaf","recovery","strain","check"].includes(t)?"heute":t==="abgleich"?"training":t;
+  const navT=["schlaf","recovery","strain","check","stress"].includes(t)?"heute":t==="abgleich"?"training":t;
   document.querySelectorAll("nav.tabs a").forEach(a=>{a.classList.toggle("on",a.dataset.t===navT);a.setAttribute("aria-current",a.dataset.t===navT?"page":"false")});
   $("moreBtn").classList.toggle("on",["wecker","einstellungen"].includes(t));
-  ({abgleich:renderCmp,heute:renderHome,gewicht:renderWeight,wecker:renderAlarms,schlaf:renderSleep,recovery:renderRecovery,strain:renderStrain,verlauf:renderHistory,training:renderSessions,einstellungen:renderSettings,live:drawLive}[t]||(()=>{}))();
+  ({abgleich:renderCmp,heute:renderHome,gewicht:renderWeight,wecker:renderAlarms,schlaf:renderSleep,recovery:renderRecovery,stress:renderStress,strain:renderStrain,verlauf:renderHistory,training:renderSessions,einstellungen:renderSettings,live:drawLive}[t]||(()=>{}))();
   window.scrollTo(0,0)}
 addEventListener("hashchange",route);
 const dayLabel=d0=>{const t=midnight(Date.now());return d0===t?"Heute":d0===t-D?"Gestern":fmtDate(d0,{weekday:"short",day:"numeric",month:"short"})};
 $("dPrev").onclick=()=>{DAY-=D;renderHome()};$("dNext").onclick=()=>{if(DAY<midnight(Date.now())){DAY+=D;renderHome()}};
 
 /* ---------- Heute ---------- */
-async function renderHome(){paintBattery();const d=await computeDay(DAY);
+async function renderHome(){paintBattery();renderStressCard();const d=await computeDay(DAY);
   $("dLabel").textContent=dayLabel(DAY);$("dNext").disabled=DAY>=midnight(Date.now());
   const sl=d.sleep;
   ring($("dSleep"),sl?sl.perf/100:0,sl?C.sleep:C.dim,sl?sl.perf:"–",sl?"%":"");
@@ -1871,6 +1902,51 @@ async function recheckLate(){let n=0;if(!SY.late||!SY.late.size)return 0;
 const qualTxt=c=>!c||!c.n?"ohne Whoop-Daten":c.r>=0.9&&c.mae<=5?"Übereinstimmung sehr gut":c.r>=0.75&&c.mae<=10?"Übereinstimmung gut":"Übereinstimmung mäßig";
 function showSyncSummary(lines,found){sheet("Aktualisiert",lines.map(l=>"<p>"+esc(l)+"</p>").join("")+(found.length?'<div style="margin-top:12px">'+found.map(s=>'<button class="btn ghost wide" style="margin-top:8px;justify-content:space-between;text-transform:none;letter-spacing:0" data-open="'+esc(s.id)+'"><span>'+esc(s.sport||"Sport")+" · "+esc(fmtDate(s.start,{weekday:"short"}))+" "+fmtTime(s.start)+" · "+Math.round(s.dur/60)+' Min.</span><span class="mute small">'+esc(qualTxt(s.cmp))+'</span></button>').join("")+'</div>':""))}
 $("sheetB").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(!b)return;const s=SESSIONS.find(x=>x.id===b.dataset.open);$("sheet").classList.remove("on");if(s)openSavedCmp(s)});
+/* ---------- Stress (0–3) ---------- */
+const ST_COL=v=>v==null?"#555555":v<1?"#0099ff":v<2?"#ffc53d":"#ff5577";
+let STRESS_CACHE={k:"",r:null};
+async function computeStress(end){end=end||Date.now();const start=end-24*3600e3,bStart=start-14*D;
+  const key=Math.floor(end/120e3)+"|"+SESSIONS.length+"|"+Object.keys(SLEEPS).length+"|"+(window.__minRev||0);if(STRESS_CACHE.k===key)return STRESS_CACHE.r;
+  const mins=await DB.range("minutes",bStart,end),rrRows=await DB.range("rr",bStart-5*60e3,end),ln=EP.lnRmssdByMinute(rrRows);
+  const sess=SESSIONS.filter(x=>x.end>bStart).map(x=>[x.start,x.end]),sls=Object.values(SLEEPS).filter(sl=>sl.end>bStart);
+  const asleep=t=>sls.some(sl=>t>=sl.start&&t<sl.end),inSess=t=>sess.some(([a,b])=>t>=a&&t<b);
+  const rows=mins.map(m=>({t:m.t,hr:m.hr,ln:ln[m.t]!=null?ln[m.t]:null,act:inSess(m.t)||(m.steps!=null&&m.steps>=25)}));
+  let base=EP.stressBase(rows.filter(r=>r.t<start&&!r.act&&!asleep(r.t))),prov=false;
+  if(!base){base=EP.stressBase(rows.filter(r=>r.t>=start&&!r.act&&!asleep(r.t)));prov=!!base}
+  const raw=rows.filter(r=>r.t>=start).map(r=>({t:r.t,act:r.act,sleep:asleep(r.t),v:r.act?null:EP.stressValue(r,base)}));
+  const out=raw.map((r,i)=>{if(r.v==null)return r;const w=[];for(let j=i;j>=0&&raw[j].t>r.t-5*60e3;j--)if(raw[j].v!=null)w.push(raw[j].v);return Object.assign({},r,{v:EP.mean(w)})});
+  const val=out.filter(r=>r.v!=null),recent=val.filter(r=>r.t>end-60*60e3).slice(-15);
+  const now=recent.length?EP.mean(recent.map(r=>r.v)):null,nowT=recent.length?recent[recent.length-1].t:null;
+  const zone=[0,0,0];val.forEach(r=>zone[r.v<1?0:r.v<2?1:2]++);
+  const res={start,end,pts:out,now,nowT,zone,avg:val.length?EP.mean(val.map(r=>r.v)):null,base,prov,valid:val.length};STRESS_CACHE={k:key,r:res};return res}
+function stressFmt(v){return v==null?"–":v.toFixed(1).replace(".",",")}
+async function renderStressCard(){const r=await computeStress(),v=r.now;$("hStress").textContent=stressFmt(v);$("hStress").style.color=v!=null?ST_COL(v):"";
+  $("hStressMeter").className="smeter"+(v!=null?" z"+(v<1?0:v<2?1:2):"");
+  $("hStressSub").textContent=!r.base?"Basis im Aufbau":v!=null?EP.stressLevel(v)+" · "+fmtTime(r.nowT)+" ›":r.valid?"Ø 24 h "+stressFmt(r.avg)+" ›":"Keine Daten ›";}
+$("stressCard").onclick=()=>{location.hash="#stress"};
+function stressChart(fig,r){const svg=fig.querySelector("svg"),W=fig.clientWidth,Hh=fig.clientHeight;if(!W)return;fig._pts=[];fig._refresh&&fig._refresh();svg.setAttribute("viewBox","0 0 "+W+" "+Hh);
+  const pad={l:30,r:10,t:10,b:22},iw=W-pad.l-pad.r,ih=Hh-pad.t-pad.b,X=t=>pad.l+(t-r.start)/(r.end-r.start)*iw,Y=v=>pad.t+(1-v/3)*ih;let s="";
+  [[0,1,"#0099ff"],[1,2,"#ffc53d"],[2,3,"#ff5577"]].forEach(([a,b,c])=>s+='<rect x="'+pad.l+'" y="'+Y(b)+'" width="'+iw+'" height="'+(Y(a)-Y(b))+'" fill="'+c+'" opacity=".07"/>');
+  [0,1,2,3].forEach(v=>s+='<line x1="'+pad.l+'" x2="'+(W-pad.r)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="#262626"/><text x="'+(pad.l-6)+'" y="'+(Y(v)+4)+'" fill="#999999" font-size="10" text-anchor="end">'+v+'</text>');
+  Object.values(SLEEPS).forEach(sl=>{const a=Math.max(sl.start,r.start),b=Math.min(sl.end,r.end);if(b>a)s+='<rect x="'+X(a)+'" y="'+pad.t+'" width="'+(X(b)-X(a))+'" height="'+ih+'" fill="#179b6e" opacity=".10"/><text x="'+(X(a)+4)+'" y="'+(pad.t+11)+'" fill="#179b6e" font-size="10">Schlaf</text>'});
+  const h0=new Date(r.start);h0.setMinutes(0,0,0);for(let t=h0.getTime()+3600e3;t<=r.end;t+=3600e3){const h=new Date(t).getHours();if(h%(W<520?6:3)===0)s+='<line x1="'+X(t)+'" x2="'+X(t)+'" y1="'+pad.t+'" y2="'+(pad.t+ih)+'" stroke="#1d1d1d"/><text x="'+X(t)+'" y="'+(Hh-6)+'" fill="#999999" font-size="10" text-anchor="middle">'+String(h).padStart(2,"0")+':00</text>'}
+  r.pts.forEach(p=>{if(p.act)s+='<line x1="'+X(p.t)+'" x2="'+X(p.t)+'" y1="'+(pad.t+ih-5)+'" y2="'+(pad.t+ih)+'" stroke="#777" stroke-width="1.5"/>'});
+  let seg=[],last=null;const segs=[];r.pts.forEach(p=>{if(p.v==null||(last!=null&&p.t-last>10*60e3)){if(seg.length)segs.push(seg);seg=[]}if(p.v!=null){seg.push(p);last=p.t}});if(seg.length)segs.push(seg);
+  segs.forEach(sg=>{for(let i=1;i<sg.length;i++){const a=sg[i-1],b=sg[i];s+='<line x1="'+X(a.t).toFixed(1)+'" y1="'+Y(a.v).toFixed(1)+'" x2="'+X(b.t).toFixed(1)+'" y2="'+Y(b.v).toFixed(1)+'" stroke="'+ST_COL((a.v+b.v)/2)+'" stroke-width="2" stroke-linecap="round"/>'}
+    if(sg.length===1)s+='<circle cx="'+X(sg[0].t)+'" cy="'+Y(sg[0].v)+'" r="2" fill="'+ST_COL(sg[0].v)+'"/>'});
+  if(!r.valid)s+='<text x="'+(pad.l+iw/2)+'" y="'+(pad.t+ih/2)+'" fill="#999999" font-size="13" text-anchor="middle">'+(r.base?"Keine bewertbaren Minuten in den letzten 24 h":"Basis wird aufgebaut – lade Daten vom Strap")+'</text>';
+  svg.innerHTML=s;
+  const P=[];r.pts.forEach((p,i)=>{if(i%3&&i!==r.pts.length-1)return;P.push({px:X(p.t),py:p.v!=null?Y(p.v):pad.t+ih-2,t:fmtTime(p.t)+(p.sleep?" · Schlaf":""),v:p.v!=null?stressFmt(p.v)+" · "+EP.stressLevel(p.v):p.act?"Bewegung – nicht bewertet":"kein Wert",c:ST_COL(p.v)})});
+  fig._pts=P;fig._refresh&&fig._refresh()}
+async function renderStress(){const r=await computeStress();$("stNow").textContent=stressFmt(r.now);$("stNow").style.color=ST_COL(r.now);
+  $("stLvl").textContent=r.now!=null?EP.stressLevel(r.now):" ";
+  $("stNowSub").textContent=r.now!=null?"Ø der letzten 15 Messminuten bis "+fmtTime(r.nowT)+(r.prov?" · vorläufige Basis":""):"In der letzten Stunde keine bewertbaren Werte"+(r.avg!=null?" · Ø 24 h "+stressFmt(r.avg):"")+". Neue Werte kommen beim Laden vom Strap (↻ auf der Startseite) oder im Live-Modus.";
+  $("stDate").textContent="Letzte 24 Stunden · "+fmtDate(r.start,{weekday:"short"})+" "+fmtTime(r.start)+" bis "+fmtTime(r.end);
+  const f=$("fStress");attachHover(f);stressChart(f,r);
+  const tot=r.zone[0]+r.zone[1]+r.zone[2],hm=m=>m>=60?Math.floor(m/60)+":"+String(m%60).padStart(2,"0")+" h":m+" min";
+  $("stZones").innerHTML=[["Niedrig","#0099ff",0],["Mittel","#ffc53d",1],["Hoch","#ff5577",2]].map(([n,c,i])=>'<div><b style="color:'+c+'">'+(tot?Math.round(r.zone[i]/tot*100):0)+' %</b><span>'+n+' · '+hm(r.zone[i])+'</span></div>').join("");
+  $("stBase").innerHTML=r.base?'<h2>Deine Basis</h2><p class="sub" style="margin:0">Puls '+Math.round(r.base.hr)+' bpm'+(r.base.ln!=null?' · HRV '+Math.round(Math.exp(r.base.ln))+' ms':' · HRV: noch zu wenige Schlag-zu-Schlag-Daten, Stress vorerst nur aus dem Puls')+' – aus '+(r.prov?'den letzten 24 Stunden (vorläufig, bis mehr Tage da sind)':'den 14 Tagen davor, wach und ohne Bewegung')+'. Ø Stress 24 h: '+stressFmt(r.avg)+'.</p>':'<h2>Basis wird aufgebaut</h2><p class="sub" style="margin:0">Für den Stresswert braucht die App mindestens 3 Stunden ruhige Wach-Minuten vom Strap. Tippe auf der Startseite auf ↻.</p>'}
+new ResizeObserver(()=>{if($("s-stress").classList.contains("on"))renderStress()}).observe($("fStress"));
 /* ---------- Akku & Strap-Aktualisierung auf der Startseite ---------- */
 async function setBattery(v,src){BLE.battery=v;try{await DB.put("meta",{k:"battery",v,ts:Date.now(),src})}catch(e){}paintBattery();if(BLE.state==="on")$("battTxt").textContent=v+" %"}
 async function paintBattery(){let b=null;try{b=await DB.get("meta","battery")}catch(e){}const v=BLE.state==="on"&&BLE.battery!=null?BLE.battery:b?b.v:null;
