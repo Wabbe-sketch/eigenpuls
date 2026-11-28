@@ -57,6 +57,18 @@ h2{font-family:var(--cond);font-size:18px;font-weight:600;margin:0 0 8px;letter-
 .smeter{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:8px 0 6px}.smeter i{height:4px;border-radius:2px;background:#262626;transition:background .3s}
 .smeter.z0 i:nth-child(1){background:#0099ff}.smeter.z1 i:nth-child(2){background:#ffc53d}.smeter.z2 i:nth-child(3){background:#ff5577}
 @media (prefers-reduced-motion:reduce){.smeter i{transition:none}}
+.plan{display:block;width:100%;text-align:left;border:0;color:inherit;font:inherit;cursor:pointer;background:linear-gradient(180deg,rgba(23,155,110,.16),rgba(23,155,110,.03) 70%),var(--card,#151515)}
+.plan:hover{filter:brightness(1.08)}.plan:focus-visible{outline:2px solid var(--sleep,#179b6e);outline-offset:2px}
+.plan h2{margin:0 0 12px}.plan .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.plan .cols p{margin:0;font-size:12px;color:var(--mute)}.plan .cols b{display:block;font-family:var(--cond);font-size:30px;font-weight:600;line-height:1.1;color:var(--ink)}
+.plan .cols div:nth-child(2){text-align:center}.plan .cols div:nth-child(3){text-align:right}
+.plan .tl{position:relative;height:30px;margin:14px 0 4px}.plan .tl .ax{position:absolute;left:0;right:0;top:9px;height:6px;border-radius:3px;background:#232323}
+.plan .tl .win{position:absolute;top:5px;height:14px;border-radius:4px;border:1px dashed rgba(23,155,110,.55)}
+.plan .tl .lat{position:absolute;top:9px;height:6px;background:rgba(23,155,110,.4);border-radius:3px 0 0 3px}
+.plan .tl .bar{position:absolute;top:9px;height:6px;background:#179b6e;border-radius:0 3px 3px 0}
+.plan .tl .now{position:absolute;top:3px;width:2px;height:18px;background:#fff;border-radius:1px}
+.plan .tk{display:flex;justify-content:space-between;font-size:10px;color:var(--mute);margin-top:-6px}
+.plan .pn{margin:8px 0 0;font-size:13px;color:var(--mute)}
 .homebar{display:flex;align-items:center;justify-content:space-between;margin:2px 2px 0;min-height:30px}
 .batt{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--mute);background:none;border:0;padding:4px 2px;font:inherit;font-size:13px;cursor:pointer}
 .batt svg{width:22px;height:12px}.batt.low{color:var(--red)}.batt .num{color:var(--ink)}.batt.low .num{color:var(--red)}
@@ -321,6 +333,11 @@ nav.tabs a,nav.tabs .navmore{font-family:inherit;text-transform:none;letter-spac
     <div class="scale" id="coachScale"><i class="band" id="coachBand"></i><i class="cur" id="coachCur" style="left:0;width:0"></i></div>
     <div class="ticks"><span>0</span><span>7</span><span>14</span><span>21</span></div>
   </div>
+  <button class="card plan" id="planCard" aria-label="Schlafplan für heute Nacht öffnen"><h2>Schlafplan für heute Nacht</h2>
+    <div class="cols"><div><p>Ins Bett</p><b id="plBed">–</b></div><div><p>Schlafbedarf</p><b id="plNeed">–</b></div><div><p>Aufstehen</p><b id="plWake">–</b></div></div>
+    <div class="tl" aria-hidden="true"><i class="ax"></i><i class="win" id="plWin"></i><i class="lat" id="plLat"></i><i class="bar" id="plBar"></i><i class="now" id="plNow"></i></div>
+    <div class="tk" aria-hidden="true"><span>20</span><span>22</span><span>0</span><span>2</span><span>4</span><span>6</span><span>8</span><span>10</span></div>
+    <p class="pn" id="plNote">&nbsp;</p></button>
   <div class="grid2 tiles">
     <div class="card"><p class="lbl">HRV</p><div class="mid" style="color:var(--cyan)"><span class="num" id="hHrv">–</span><span class="unit">ms</span></div><div class="sub" id="hHrvSub">&nbsp;</div></div>
     <div class="card"><p class="lbl">Ruhepuls</p><div class="mid"><span class="num" id="hRhr">–</span><span class="unit">bpm</span></div><div class="sub" id="hRhrSub">&nbsp;</div></div>
@@ -739,6 +756,24 @@ var EP = (function(){
 
   /* Stress 0–3 (angelehnt an WHOOP Stress Monitor): Puls und HRV je Minute gegen die persönliche
      Basis der letzten 14 Tage (wach, ohne Bewegung); Minuten mit Bewegung/Training werden nicht bewertet. */
+
+  /* Schlafplan (angelehnt an den WHOOP Sleep Planner): Schlafbedarf = Basis + Anstrengung + Schlafschuld,
+     mind. 7 h (AASM/SRS), Schuldabbau höchstens +60 min pro Nacht; Bettzeit = Aufstehzeit − Bedarf/Effizienz − Einschlafzeit. */
+  function todMin(t){var d=new Date(t),m=d.getHours()*60+d.getMinutes();return m<12*60?m+1440:m}/* Minuten ab Mitternacht, nach 12 Uhr „Abend“-Skala */
+  function sleepPlan(o){var n=(o.nights||[]).slice().sort(function(a,b){return b.end-a.end});var last7=n.slice(0,7);
+    var base=(o.baseH||7.5)*60,strainAdd=o.strain>10?Math.round((o.strain-10)*5):0;
+    var debts=n.slice(0,3).map(function(s){return Math.max(0,(s.need||base)-s.asleepMin)}),debt=debts.length?Math.round(0.5*mean(debts)):0;
+    var debtAdd=Math.min(60,debt);var need=Math.max(420,Math.round(base+strainAdd+debtAdd));
+    var effs=last7.map(function(s){return s.asleepMin/Math.max(1,s.inBedMin)}).filter(function(v){return v>0.5&&v<=1});
+    var eff=effs.length>=2?Math.max(0.8,Math.min(0.97,median(effs))):0.9;var lat=15;
+    var wake=null,wakeSrc="";if(o.alarmTs&&o.alarmTs-o.now<20*3600e3&&o.alarmTs>o.now){wake=o.alarmTs;wakeSrc="Wecker"}
+    if(!wake){var wm=last7.length>=2?median(last7.map(function(s){var d=new Date(s.end);return d.getHours()*60+d.getMinutes()})):420;
+      var c=new Date(o.now);c.setHours(0,0,0,0);var w=c.getTime()+wm*60e3;while(w<o.now+3*3600e3)w+=864e5;wake=w;wakeSrc=last7.length>=2?"übliche Aufstehzeit":"Standard 7:00"}
+    var tib=Math.round(need/eff),bed=wake-(tib+lat)*60e3,usual=last7.length>=3?median(last7.map(function(s){return todMin(s.start)})):null,capped=false,rest=0;
+    if(usual!=null){var bm=todMin(bed);if(bm<usual-60){var nb=bed+(usual-60-bm)*60e3;rest=Math.round((nb-bed)/60e3*eff);bed=nb;capped=true}}
+    var onset=bed+lat*60e3,asleep=Math.round((wake-onset)/60e3*eff),mid=onset+(wake-onset)/2,om=todMin(onset);
+    return {bed:bed,onset:onset,wake:wake,wakeSrc:wakeSrc,need:need,base:Math.round(base),strainAdd:strainAdd,debt:debt,debtAdd:debtAdd,eff:eff,lat:lat,tib:tib,asleep:asleep,
+      capped:capped,rest:rest,usual:usual,window:om>=22*60&&om<23*60,late:om>=24*60,midLate:todMin(mid)>=28*60,nights:n.length}}
   function stressBase(rows){var hr=[],ln=[];rows.forEach(function(r){if(r.hr>0)hr.push(r.hr);if(r.ln!=null)ln.push(r.ln)});
     if(hr.length<180)return null;var mh=median(hr),sh=Math.max(4,1.4826*median(hr.map(function(v){return Math.abs(v-mh)})));
     var b={hr:mh,hrSd:sh,n:hr.length};if(ln.length>=120){var ml=median(ln);b.ln=ml;b.lnSd=Math.max(0.15,1.4826*median(ln.map(function(v){return Math.abs(v-ml)})))}return b}
@@ -924,7 +959,7 @@ var EP = (function(){
     if(!out.length)out.push({tone:"ok",text:"Noch zu wenig Daten. Nach einigen Nächten mit dem Strap erscheinen hier deine Muster."});
     return out;
   }
-  return {stressBase:stressBase,stressValue:stressValue,stressLevel:stressLevel,lnRmssdByMinute:lnRmssdByMinute,W:W,PT:PT,CMD:CMD,EVT:EVT,crc8:crc8,crc32:crc32,u32:u32,buildCmd:buildCmd,buildAck:buildAck,buildAlarm:buildAlarm,nextAlarmTs:nextAlarmTs,repeatText:repeatText,le32:le32,FrameReader:FrameReader,parseRealtime:parseRealtime,parseHistorical:parseHistorical,parseMeta:parseMeta,motionOf:motionOf,StepEstimator:StepEstimator,parseStdHr:parseStdHr,hex:hex,
+  return {sleepPlan:sleepPlan,todMin:todMin,stressBase:stressBase,stressValue:stressValue,stressLevel:stressLevel,lnRmssdByMinute:lnRmssdByMinute,W:W,PT:PT,CMD:CMD,EVT:EVT,crc8:crc8,crc32:crc32,u32:u32,buildCmd:buildCmd,buildAck:buildAck,buildAlarm:buildAlarm,nextAlarmTs:nextAlarmTs,repeatText:repeatText,le32:le32,FrameReader:FrameReader,parseRealtime:parseRealtime,parseHistorical:parseHistorical,parseMeta:parseMeta,motionOf:motionOf,StepEstimator:StepEstimator,parseStdHr:parseStdHr,hex:hex,
     mean:mean,sd:sd,median:median,pct:pct,cleanRR:cleanRR,rmssd:rmssd,analyzeCheck:analyzeCheck,detectSleep:detectSleep,awakeMinutes:awakeMinutes,nightMetrics:nightMetrics,baselineOf:baselineOf,recovery:recovery,recColor:recColor,
     trimpStep:trimpStep,parseFIT:parseFIT,finishWorkout:finishWorkout,toMinutes:toMinutes,detectWorkouts:detectWorkouts,corr:corr,compareHr:compareHr,mergeHr:mergeHr,hrvTrend:hrvTrend,sri:sri,stageNight:stageNight,STAGE_IDEAL:STAGE_IDEAL,strain:strain,strainLabel:strainLabel,strainTarget:strainTarget,zoneOf:zoneOf,bmr:bmr,activeKcal:activeKcal,sleepNeed:sleepNeed,dayKey:dayKey,insights:insights};
 })();
@@ -1226,7 +1261,7 @@ const dayLabel=d0=>{const t=midnight(Date.now());return d0===t?"Heute":d0===t-D?
 $("dPrev").onclick=()=>{DAY-=D;renderHome()};$("dNext").onclick=()=>{if(DAY<midnight(Date.now())){DAY+=D;renderHome()}};
 
 /* ---------- Heute ---------- */
-async function renderHome(){paintBattery();renderStressCard();const d=await computeDay(DAY);
+async function renderHome(){paintBattery();renderStressCard();renderPlan();const d=await computeDay(DAY);
   $("dLabel").textContent=dayLabel(DAY);$("dNext").disabled=DAY>=midnight(Date.now());
   const sl=d.sleep;
   ring($("dSleep"),sl?sl.perf/100:0,sl?C.sleep:C.dim,sl?sl.perf:"–",sl?"%":"");
@@ -1902,6 +1937,28 @@ async function recheckLate(){let n=0;if(!SY.late||!SY.late.size)return 0;
 const qualTxt=c=>!c||!c.n?"ohne Whoop-Daten":c.r>=0.9&&c.mae<=5?"Übereinstimmung sehr gut":c.r>=0.75&&c.mae<=10?"Übereinstimmung gut":"Übereinstimmung mäßig";
 function showSyncSummary(lines,found){sheet("Aktualisiert",lines.map(l=>"<p>"+esc(l)+"</p>").join("")+(found.length?'<div style="margin-top:12px">'+found.map(s=>'<button class="btn ghost wide" style="margin-top:8px;justify-content:space-between;text-transform:none;letter-spacing:0" data-open="'+esc(s.id)+'"><span>'+esc(s.sport||"Sport")+" · "+esc(fmtDate(s.start,{weekday:"short"}))+" "+fmtTime(s.start)+" · "+Math.round(s.dur/60)+' Min.</span><span class="mute small">'+esc(qualTxt(s.cmp))+'</span></button>').join("")+'</div>':""))}
 $("sheetB").addEventListener("click",e=>{const b=e.target.closest("[data-open]");if(!b)return;const s=SESSIONS.find(x=>x.id===b.dataset.open);$("sheet").classList.remove("on");if(s)openSavedCmp(s)});
+
+/* ---------- Schlafplan ---------- */
+let PLAN=null;
+async function computePlan(){const now=Date.now(),today=await computeDay(midnight(now));
+  const nights=Object.values(SLEEPS).filter(s=>s.end>now-14*D&&s.asleepMin>120);
+  const al=ALARMS.filter(a=>a.on).map(a=>EP.nextAlarmTs(a,now)).filter(Boolean).sort((a,b)=>a-b)[0]||null;
+  return EP.sleepPlan({nights,baseH:+S.need||7.5,strain:today.strain||0,alarmTs:al,now})}
+const hmDur=m=>Math.floor(m/60)+":"+String(Math.round(m%60)).padStart(2,"0");
+async function renderPlan(){const p=PLAN=await computePlan();$("plBed").textContent=fmtTime(p.bed);$("plNeed").textContent=hmDur(p.need)+" h";$("plWake").textContent=fmtTime(p.wake);
+  const ref=new Date(p.wake);ref.setHours(10,0,0,0);const R1=ref.getTime(),R0=R1-14*3600e3,pos=t=>Math.max(0,Math.min(100,(t-R0)/(R1-R0)*100));
+  const set=(id,a,b)=>{const e=$(id);e.style.left=pos(a)+"%";e.style.width=Math.max(0,pos(b)-pos(a))+"%"};
+  set("plLat",p.bed,p.onset);set("plBar",p.onset,p.wake);set("plWin",R0+2*3600e3,R0+3*3600e3);
+  const now=Date.now();$("plNow").style.display=now>R0&&now<R1?"block":"none";$("plNow").style.left=pos(now)+"%";
+  const bits=[];if(p.wakeSrc==="Wecker")bits.push("Wecker "+fmtTime(p.wake));if(p.debt>=15)bits.push("Schlafschuld "+hmDur(p.debt)+" h");if(p.strainAdd)bits.push("Anstrengung +"+p.strainAdd+" min");
+  if(p.capped)bits.push("Rest der Schuld in den nächsten Nächten");else if(p.window)bits.push("Einschlafen im günstigen Fenster 22–23 Uhr");else if(p.late)bits.push("Einschlafen nach Mitternacht – früher wäre besser");
+  $("plNote").textContent=bits.length?bits.join(" · "):"Basis "+hmDur(p.base)+" h · Effizienz "+Math.round(p.eff*100)+" %"}
+$("planCard").onclick=()=>{const p=PLAN;if(!p)return;const row=(a,b)=>'<tr><td>'+a+'</td><td style="text-align:right" class="num">'+b+'</td></tr>';
+  sheet("Schlafplan für heute Nacht",'<p>Ins Bett um <b>'+fmtTime(p.bed)+'</b>, einschlafen gegen <b>'+fmtTime(p.onset)+'</b>, aufstehen um <b>'+fmtTime(p.wake)+'</b> ('+esc(p.wakeSrc)+').</p>'+
+  '<table class="cmpt" style="width:100%">'+row("Grundbedarf",hmDur(p.base)+" h")+row("+ Anstrengung heute",p.strainAdd+" min")+row("+ Schlafschuld (Abbau max. 60 min/Nacht)",p.debtAdd+" min"+(p.debt>p.debtAdd?" von "+p.debt:""))+
+  row("= Schlafbedarf (mind. 7 h)","<b>"+hmDur(p.need)+" h</b>")+row("÷ deine Schlafeffizienz",Math.round(p.eff*100)+" %")+row("+ Einschlafzeit",p.lat+" min")+row("= Zeit im Bett",hmDur(p.tib+p.lat)+" h")+'</table>'+
+  (p.capped?'<p>Damit der Rhythmus stabil bleibt, verschiebt der Plan die Bettzeit höchstens 1 Stunde vor deine übliche Zeit. Dadurch fehlen heute etwa '+p.rest+' min – sie werden in den nächsten Nächten nachgeholt.</p>':'')+
+  '<p class="sub">Grundlage: mindestens 7 Stunden Schlaf für Erwachsene (AASM/SRS). Regelmäßige Schlafzeiten sagen das Sterberisiko stärker voraus als die Schlafdauer (Windred 2023, UK Biobank). Einschlafen zwischen 22 und 23 Uhr ging mit dem niedrigsten Herz-Kreislauf-Risiko einher (Nikbakhtian 2021). Schlafschuld wird wie bei WHOOP schrittweise abgebaut.'+(p.nights<3?' Noch wenige Nächte erfasst – der Plan wird mit jeder Nacht genauer.':'')+'</p>')};
 /* ---------- Stress (0–3) ---------- */
 const ST_COL=v=>v==null?"#555555":v<1?"#0099ff":v<2?"#ffc53d":"#ff5577";
 let STRESS_CACHE={k:"",r:null};
